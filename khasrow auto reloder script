@@ -1,0 +1,111 @@
+// ==UserScript==
+// @name         Sadra Techs IVSB NEW (Auto Reload in 3s)
+// @namespace    http://tampermonkey.net/
+// @version      20.1.4
+// @description  Auto captcha detection, skip reload on confirm page with barcode, single reload control
+// @author       Fraidoon walizada
+// @match        https://evisatraveller.mfa.ir/*
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=mfa.ir
+// @grant        none
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    const formElement = document.querySelector('#register_form');
+    const imgElement = document.querySelector('img.ecaptcha');
+
+    if (formElement) {
+        if (imgElement) {
+            handleCaptcha(imgElement);
+        } else {
+            handleNextStep();
+        }
+    } else {
+        const redirectElement = document.querySelector('.error-section--waiting');
+        const isFinalTab = document.title.includes("پایان مراحل ثبت درخواست");
+        const isConfirmPage = window.location.href.includes('/request/confirm/');
+        const hasRefreshed = sessionStorage.getItem('hasRefreshed');
+        const hasBarcode = document.querySelector('img.barcode') !== null;
+
+        if (!redirectElement && !isFinalTab && !hasBarcode) {
+            if (isConfirmPage && hasRefreshed === 'true') {
+                console.log('⏹️ No reload: already refreshed once on confirm page.');
+                return;
+            }
+
+            setTimeout(() => {
+                if (isConfirmPage) {
+                    sessionStorage.setItem('hasRefreshed', 'true');
+                }
+                console.log('🔁 Reloading page...');
+                location.reload();
+            }, 3000);
+        } else if (hasBarcode) {
+            console.log('✅ Barcode found, skip reload.');
+        } else {
+            checkForNextPage();
+        }
+    }
+
+    function handleCaptcha(imgElement) {
+        const hrefValue = imgElement.getAttribute('src');
+        console.log('Captcha Image URL:', hrefValue);
+
+        let loopCaptcha = setInterval(() => {
+            const imginputElement = document.querySelector('#id_captcha_1');
+            if (imginputElement && imginputElement.value.length !== 4) {
+                const xhr = new XMLHttpRequest();
+                xhr.open("GET", "https://evisatraveller.mfa.ir" + hrefValue, true);
+                xhr.responseType = "arraybuffer";
+                xhr.onload = onRequestCompleted;
+                xhr.onerror = onRequestCompleted;
+                xhr.send();
+            } else {
+                clearInterval(loopCaptcha);
+                const submitBtn = document.getElementById('first_step_submit_btn');
+                if (submitBtn) submitBtn.click();
+            }
+        }, 5000);
+    }
+
+    function onRequestCompleted() {
+        if (this.status === 200) {
+            const imageBlob = new Blob([this.response], { type: this.getResponseHeader("content-type") });
+            console.log('Captcha Image Blob:', imageBlob);
+            getAICaptcha(imageBlob);
+        }
+    }
+
+    async function getAICaptcha(image) {
+        // کد هوش مصنوعی کپچا را در اینجا قرار دهید (در صورت وجود)
+    }
+
+    function handleNextStep() {
+        const secondPage = document.querySelector('#id_first_name');
+        if (secondPage) {
+            playSound();
+        }
+
+        setInterval(() => {
+            const btn = document.getElementById('final-form-submit');
+            if (btn) btn.disabled = false;
+        }, 3000);
+    }
+
+    function playSound() {
+        const audioElement = new Audio("https://www2.cs.uic.edu/~i101/SoundFiles/CantinaBand3.wav");
+        audioElement.play().catch(err => console.log("🔇 Autoplay blocked:", err));
+        console.log("Next page loaded, playing sound.");
+    }
+
+    function checkForNextPage() {
+        const interval = setInterval(() => {
+            const nextPageElement = document.querySelector('#id_first_name');
+            if (nextPageElement) {
+                clearInterval(interval);
+                playSound();
+            }
+        }, 1000);
+    }
+})();
